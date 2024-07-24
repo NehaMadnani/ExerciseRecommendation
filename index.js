@@ -3,15 +3,18 @@ const multer = require('multer');
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
+const nodemailer = require('nodemailer');
+const { marked } = require('marked'); // Correct import
+require('dotenv').config();
 
 const app = express();
 const port = 3000;
 
 // Configure AWS SDK
 AWS.config.update({
-  accessKeyId: 'AKIA2FMKEYMLGV3CRV6P',
-  secretAccessKey: '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',
-  region: 'us-east-1',
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
 });
 
 const s3 = new AWS.S3();
@@ -23,7 +26,16 @@ const upload = multer({ dest: 'uploads/' });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Endpoint to handle POST requests
+// Configure Nodemailer to use Gmail SMTP
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
+  },
+});
+
+// Endpoint to handle POST requests for uploads
 app.post('/upload', upload.single('health-data'), async (req, res) => {
   const { name, email, height, weight, age, gender, calories } = req.body;
   const file = req.file;
@@ -40,7 +52,7 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
     // Upload JSON data to S3
     const jsonData = JSON.stringify({ name, email, height, weight, age, gender, calories });
     await s3.upload({
-      Bucket: 'health-data-raw',
+      Bucket: process.env.YOUR_S3_BUCKET_NAME,
       Key: jsonKey,
       Body: jsonData,
       ContentType: 'application/json',
@@ -49,7 +61,7 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
     // Upload file to S3
     const fileStream = fs.createReadStream(file.path);
     await s3.upload({
-      Bucket: 'health-data-raw',
+      Bucket: process.env.YOUR_S3_BUCKET_NAME,
       Key: fileKey,
       Body: fileStream,
       ContentType: file.mimetype,
@@ -57,7 +69,7 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
 
     // Store metadata in DynamoDB
     const params = {
-      TableName: 'userUploadData',
+      TableName: process.env.YOUR_DYNAMODB_TABLE_NAME,
       Item: {
         uploadId,
         name,
@@ -81,9 +93,70 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
       }
     });
 
-    res.status(200).send('Successfully uploaded JSON and file to S3 and metadata to DynamoDB.');
+    res.status(200).send('Successfully uploaded data.');
   } catch (err) {
     res.status(500).send('Error uploading data.');
+    console.error(err);
+  }
+});
+
+// Endpoint to fetch data from DynamoDB and send email
+app.post('/send-email', async (req, res) => {
+  const { uploadId, content } = req.body;
+
+  if (!uploadId || !content) {
+    return res.status(400).send('uploadId and content are required.');
+  }
+
+  try {
+    // Fetch data from DynamoDB
+    const params = {
+      TableName: process.env.YOUR_DYNAMODB_TABLE_NAME,
+      Key: { uploadId },
+    };
+    const data = await dynamoDb.get(params).promise();
+
+    if (!data.Item) {
+      return res.status(404).send('Data not found.');
+    }
+
+    const { name, email, height, weight, age, gender, calories } = data.Item;
+
+    // Generate the email content
+    const markdownContent = `
+      Hello ${name},
+
+      Thank you for submitting your health data.
+
+      Here are the details we received:
+      - Height: ${height} cm
+      - Weight: ${weight} kg
+      - Age: ${age}
+      - Gender: ${gender}
+      - Calories Consumed: ${calories}
+
+      ${content}
+
+      Best regards,
+      Health Data Collection Team
+    `;
+
+    const htmlContent = marked(markdownContent);
+
+    // Send the email using Nodemailer
+    const mailOptions = {
+      from: process.env.GMAIL_USER,
+      to: email,
+      subject: 'Health Data Submission Confirmation',
+      text: markdownContent, // Plain text version
+      html: htmlContent, // HTML version
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).send('Email sent successfully.');
+  } catch (err) {
+    res.status(500).send('Error fetching data or sending email.');
     console.error(err);
   }
 });
