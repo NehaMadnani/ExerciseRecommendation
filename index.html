@@ -10,7 +10,10 @@
     <div class="container">
         <div class="form-container">
             <h1>Health Data Collection</h1>
-            <form action="/submit" method="post" enctype="multipart/form-data">
+            <form action="http://localhost:3000/upload" method="post" enctype="multipart/form-data">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required>
+
                 <label for="height">Height (cm):</label>
                 <input type="number" id="height" name="height" required>
 
@@ -26,6 +29,12 @@
                     <option value="female">Female</option>
                     <option value="other">Other</option>
                 </select>
+
+                <label for="calories">Calories Consumed:</label>
+                <input type="number" id="calories" name="calories" required>
+
+                <label for="email">Email ID:</label>
+                <input type="email" id="email" name="email" required>
 
                 <label for="health-data">Upload Health Data:</label>
                 <input type="file" id="health-data" name="health-data" accept=".csv, .xls, .xlsx" required>
