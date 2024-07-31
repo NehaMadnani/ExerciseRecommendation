@@ -37,10 +37,10 @@ const transporter = nodemailer.createTransport({
 
 // Endpoint to handle POST requests for uploads
 app.post('/upload', upload.single('health-data'), async (req, res) => {
-  const { name, email, height, weight, age, gender, calories } = req.body;
+  const { name, email, height, weight, age, gender,calories , calories_target } = req.body;
   const file = req.file;
 
-  if (!name || !email || !height || !weight || !age || !gender || !calories || !file) {
+  if (!name || !email || !height || !weight || !age || !gender || !calories || !calories_target || !file) {
     return res.status(400).send('All fields and file are required.');
   }
 
@@ -50,7 +50,7 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
 
   try {
     // Upload JSON data to S3
-    const jsonData = JSON.stringify({ name, email, height, weight, age, gender, calories });
+    const jsonData = JSON.stringify({ name, email, height, weight, age, gender, calories, calories_target });
     await s3.upload({
       Bucket: process.env.YOUR_S3_BUCKET_NAME,
       Key: jsonKey,
@@ -79,6 +79,7 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
         age,
         gender,
         calories,
+        calories_target,
         jsonKey,
         fileKey,
         uploadTimestamp: new Date().toISOString(),
@@ -93,7 +94,7 @@ app.post('/upload', upload.single('health-data'), async (req, res) => {
       }
     });
 
-    res.status(200).send('Successfully uploaded data.');
+    res.status(200).send('Successfully uploaded data to s3 bucket.');
   } catch (err) {
     res.status(500).send('Error uploading data.');
     console.error(err);
@@ -120,7 +121,7 @@ app.post('/send-email', async (req, res) => {
       return res.status(404).send('Data not found.');
     }
 
-    const { name, email, height, weight, age, gender, calories } = data.Item;
+    const { name, email, height, weight, age, gender, calories, calories_target } = data.Item;
 
     // Generate the email content
     const markdownContent = `
@@ -134,6 +135,7 @@ app.post('/send-email', async (req, res) => {
       - Age: ${age}
       - Gender: ${gender}
       - Calories Consumed: ${calories}
+      - Calories Target: ${calories_target}
 
       ${content}
 
